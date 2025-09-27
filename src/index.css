@@ -8,35 +8,54 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 220 26% 7%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 220 26% 9%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 220 26% 9%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 220 26% 7%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 220 26% 12%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 26% 12%;
+    --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 175 84% 32%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 220 26% 15%;
+    --input: 220 26% 15%;
+    --ring: 199 89% 48%;
 
-    --radius: 0.5rem;
+    --success: 142 71% 45%;
+    --success-foreground: 210 40% 98%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 26% 7%;
+
+    /* Tech gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(199 89% 48%), hsl(244 64% 52%));
+    --gradient-accent: linear-gradient(135deg, hsl(175 84% 32%), hsl(199 89% 48%));
+    --gradient-card: linear-gradient(135deg, hsl(220 26% 9%), hsl(220 26% 12%));
+
+    /* Glass morphism */
+    --glass-bg: hsla(220, 26%, 9%, 0.8);
+    --glass-border: hsla(199, 89%, 48%, 0.2);
+
+    /* Shadows */
+    --shadow-glow: 0 0 20px hsla(199, 89%, 48%, 0.3);
+    --shadow-card: 0 8px 32px hsla(220, 26%, 3%, 0.3);
+
+    --radius: 0.75rem;
 
     --sidebar-background: 0 0% 98%;
 
