@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { 
   Wifi, 
   Home, 
@@ -10,15 +12,43 @@ import {
   Network,
   Router,
   Smartphone,
-  Monitor
+  Monitor,
+  Users,
+  LogOut,
+  Crown
 } from "lucide-react";
 import NetworkScanner from "@/components/NetworkScanner";
 import SmartHomePanel from "@/components/SmartHomePanel";
 import NetworkTopology from "@/components/NetworkTopology";
 import SecurityDashboard from "@/components/SecurityDashboard";
+import UserManagement from "@/components/UserManagement";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const navigate = useNavigate();
+  const { user, isAdmin, loading, signOut } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth');
+    }
+  }, [user, loading, navigate]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-pulse text-primary">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -44,6 +74,18 @@ const Index = () => {
               <Badge variant="outline" className="bg-primary/10">
                 192.168.1.0/24
               </Badge>
+              <div className="flex items-center gap-2 pl-4 border-l border-border">
+                {isAdmin && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Crown className="w-3 h-3" />
+                    Admin
+                  </Badge>
+                )}
+                <span className="text-sm text-muted-foreground">{user.email}</span>
+                <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -52,7 +94,7 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 bg-card/50 backdrop-blur-glass">
+          <TabsList className="grid w-full grid-cols-6 bg-card/50 backdrop-blur-glass">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
               Dashboard
@@ -73,6 +115,12 @@ const Index = () => {
               <Shield className="h-4 w-4" />
               Security
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="users" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Users
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
@@ -207,6 +255,12 @@ const Index = () => {
           <TabsContent value="security">
             <SecurityDashboard />
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="users">
+              <UserManagement />
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>
