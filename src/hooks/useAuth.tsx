@@ -1,3 +1,17 @@
+/**
+ * Authentication Context and Provider
+ * 
+ * SECURITY MODEL:
+ * - Client-side isAdmin flag is used for UI display purposes ONLY
+ * - All actual authorization is enforced server-side via RLS policies
+ * - The has_role() database function provides server-side role validation
+ * - Even if client code is manipulated, RLS policies prevent unauthorized access
+ * 
+ * RLS Protection:
+ * - "Admins can view all profiles" - SELECT on profiles requires admin role
+ * - "Admins can manage roles" - ALL operations on user_roles require admin role
+ * - "Users can view own profile/roles" - Users can only access their own data
+ */
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -5,7 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  isAdmin: boolean;
+  isAdmin: boolean; // NOTE: For UI display only - RLS enforces actual permissions
   loading: boolean;
   signUp: (email: string, password: string, username: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
@@ -48,6 +62,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  /**
+   * Check if user has admin role - FOR UI DISPLAY ONLY
+   * 
+   * SECURITY NOTE: This client-side check controls what UI elements are shown,
+   * but does NOT provide actual security. All admin operations are protected
+   * by RLS policies that use the has_role() database function to validate
+   * permissions server-side. Even if an attacker modifies this client code,
+   * the RLS policies will deny unauthorized database operations.
+   */
   const checkAdminRole = async (userId: string) => {
     const { data } = await supabase
       .from('user_roles')
