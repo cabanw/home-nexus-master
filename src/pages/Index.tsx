@@ -15,13 +15,15 @@ import {
   Monitor,
   Users,
   LogOut,
-  Crown
+  Crown,
+  ArrowUpDown
 } from "lucide-react";
 import NetworkScanner from "@/components/NetworkScanner";
 import SmartHomePanel from "@/components/SmartHomePanel";
 import NetworkTopology from "@/components/NetworkTopology";
 import SecurityDashboard from "@/components/SecurityDashboard";
 import UserManagement from "@/components/UserManagement";
+import UpScanner from "@/components/UpScanner";
 import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
@@ -94,7 +96,7 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-card/50 backdrop-blur-glass">
+          <TabsList className="grid w-full grid-cols-7 bg-card/50 backdrop-blur-glass">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
               Dashboard
@@ -102,6 +104,10 @@ const Index = () => {
             <TabsTrigger value="scanner" className="flex items-center gap-2">
               <Wifi className="h-4 w-4" />
               Scanner
+            </TabsTrigger>
+            <TabsTrigger value="upscanner" className="flex items-center gap-2">
+              <ArrowUpDown className="h-4 w-4" />
+              Up Scanner
             </TabsTrigger>
             <TabsTrigger value="smarthome" className="flex items-center gap-2">
               <Home className="h-4 w-4" />
@@ -242,6 +248,10 @@ const Index = () => {
 
           <TabsContent value="scanner">
             <NetworkScanner />
+          </TabsContent>
+
+          <TabsContent value="upscanner">
+            <UpScanner />
           </TabsContent>
 
           <TabsContent value="smarthome">
