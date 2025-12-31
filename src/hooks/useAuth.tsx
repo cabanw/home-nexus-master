@@ -13,7 +13,7 @@
  * - "Users can view own profile/roles" - Users can only access their own data
  */
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
@@ -21,8 +21,8 @@ interface AuthContextType {
   session: Session | null;
   isAdmin: boolean; // NOTE: For UI display only - RLS enforces actual permissions
   loading: boolean;
-  signUp: (email: string, password: string, username: string) => Promise<{ error: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, username: string) => Promise<{ error: AuthError | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   /**
    * Check if user has admin role - FOR UI DISPLAY ONLY
-   * 
+   *
    * SECURITY NOTE: This client-side check controls what UI elements are shown,
    * but does NOT provide actual security. All admin operations are protected
    * by RLS policies that use the has_role() database function to validate
