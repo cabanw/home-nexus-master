@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,19 +31,14 @@ const signupSchema = z.object({
   password: passwordSchema
 });
 
-const forgotPasswordSchema = z.object({
-  email: z.string().email('Invalid email address'),
-});
-
 const Auth = () => {
   const navigate = useNavigate();
-  const { user, signIn, signUp, forgotPassword, loading } = useAuth();
+  const { user, signIn, signUp, loading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [view, setView] = useState('login'); // 'login', 'signup', or 'forgot-password'
+  const [view, setView] = useState('login');
   
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ username: '', email: '', password: '' });
-  const [forgotPasswordForm, setForgotPasswordForm] = useState({ email: '' });
 
   useEffect(() => {
     if (user && !loading) {
@@ -91,24 +86,6 @@ const Auth = () => {
     }
   };
   
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const result = forgotPasswordSchema.safeParse(forgotPasswordForm);
-    if (!result.success) {
-      toast.error(result.error.errors[0].message);
-      return;
-    }
-    setIsSubmitting(true);
-    const { error } = await forgotPassword(forgotPasswordForm.email);
-    setIsSubmitting(false);
-    if (error) {
-      toast.error(error.message || 'Failed to send reset link');
-    } else {
-      toast.success('Password reset link sent! Check your email.');
-      setView('login');
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -138,31 +115,6 @@ const Auth = () => {
         </CardHeader>
         
         <CardContent>
-          {view === 'forgot-password' ? (
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <p className='text-sm text-center text-muted-foreground px-4'>Enter your email and we'll send you a link to reset your password.</p>
-              <div className="space-y-2">
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={forgotPasswordForm.email}
-                  onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value })}
-                  className="bg-background/50"
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? 'Sending reset link...' : 'Send Reset Link'}
-              </Button>
-              <div className="text-center text-sm">
-                <button
-                  type="button"
-                  className="text-primary hover:underline"
-                  onClick={() => setView('login')}>
-                  Back to Login
-                </button>
-              </div>
-            </form>
-          ) : (
             <Tabs value={view} onValueChange={setView} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
@@ -193,12 +145,9 @@ const Auth = () => {
                     {isSubmitting ? 'Signing in...' : 'Sign In'}
                   </Button>
                   <div className="text-center text-sm">
-                    <button
-                      type="button"
-                      className="text-primary hover:underline"
-                      onClick={() => setView('forgot-password')}>
+                    <Link to="/forgot-password" className="text-primary hover:underline">
                       Forgot Password?
-                    </button>
+                    </Link>
                   </div>
                 </form>
               </TabsContent>
@@ -238,7 +187,6 @@ const Auth = () => {
                 </form>
               </TabsContent>
             </Tabs>
-          )}
         </CardContent>
       </Card>
     </div>

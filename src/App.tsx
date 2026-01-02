@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import UpdatePassword from "./pages/UpdatePassword";
+import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 import { ReactNode } from "react";
 
@@ -55,6 +56,7 @@ const App = () => (
               </Route>
               <Route element={<PublicRoute />}>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
               </Route>
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="*" element={<NotFound />} />
