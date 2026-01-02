@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Shield, Wifi } from 'lucide-react';
+import { Shield, Wifi, Chrome } from 'lucide-react';
 import { z } from 'zod';
 
 const passwordSchema = z.string()
@@ -33,7 +33,7 @@ const signupSchema = z.object({
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { user, signIn, signUp, loading } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, loading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [view, setView] = useState('login');
   
@@ -82,6 +82,18 @@ const Auth = () => {
       }
     } else {
       toast.success('Account created! The first user becomes admin.');
+      navigate('/');
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsSubmitting(true);
+    const { error } = await signInWithGoogle();
+    setIsSubmitting(false);
+    if (error) {
+      toast.error(error.message || 'Failed to sign in with Google');
+    } else {
+      toast.success('Signed in with Google!');
       navigate('/');
     }
   };
@@ -150,6 +162,23 @@ const Auth = () => {
                     </Link>
                   </div>
                 </form>
+
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-muted-foreground/20" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      Or continue with
+                    </span>
+                  </div>
+                </div>
+
+                <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isSubmitting}>
+                  <Chrome className="mr-2 h-4 w-4" />
+                  Sign in with Google
+                </Button>
+
               </TabsContent>
               
               <TabsContent value="signup">

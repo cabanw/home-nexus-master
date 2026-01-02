@@ -24,6 +24,7 @@ interface AuthContextType {
   isPasswordRecovery: boolean;
   signUp: (email: string, password: string, username: string) => Promise<{ error: AuthError | null }>;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signInWithGoogle: () => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   forgotPassword: (email: string) => Promise<{ error: AuthError | null }>;
   updateUser: (attributes: UserAttributes) => Promise<{ error: AuthError | null }>;
@@ -111,6 +112,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error };
   };
 
+  const signInWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+    });
+    return { error };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
@@ -131,7 +139,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, isAdmin, loading, isPasswordRecovery, signUp, signIn, signOut, forgotPassword, updateUser }}>
+    <AuthContext.Provider value={{ user, session, isAdmin, loading, isPasswordRecovery, signUp, signIn, signInWithGoogle, signOut, forgotPassword, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
