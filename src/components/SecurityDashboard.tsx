@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,10 +10,12 @@ import {
   AlertTriangle,
   Eye,
   Lock,
-  Wifi,
-  Activity
+  Activity,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 interface SecurityAlert {
   id: string;
@@ -30,7 +33,7 @@ interface SecurityMetric {
   status: 'good' | 'warning' | 'critical';
 }
 
-const mockAlerts: SecurityAlert[] = [
+const initialAlerts: SecurityAlert[] = [
   {
     id: "1",
     type: "critical",
@@ -85,8 +88,43 @@ const securityMetrics: SecurityMetric[] = [
 ];
 
 export default function SecurityDashboard() {
-  const criticalAlerts = mockAlerts.filter(a => a.type === 'critical').length;
-  const warningAlerts = mockAlerts.filter(a => a.type === 'warning').length;
+  const navigate = useNavigate();
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [alerts, setAlerts] = useState<SecurityAlert[]>(initialAlerts);
+
+  const criticalAlerts = alerts.filter(a => a.type === 'critical').length;
+  const warningAlerts = alerts.filter(a => a.type === 'warning').length;
+
+  const handleSecurityScan = () => {
+    setIsScanning(true);
+    setScanProgress(0);
+
+    const interval = setInterval(() => {
+      setScanProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsScanning(false);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 200);
+  };
+
+  const handleUpdatePolicies = () => {
+    setIsUpdating(true);
+    setTimeout(() => {
+      setLastUpdated(new Date());
+      setIsUpdating(false);
+    }, 1500);
+  };
+
+  const handleResolve = (alertId: string) => {
+    setAlerts(currentAlerts => currentAlerts.filter(alert => alert.id !== alertId));
+  };
   
   const getAlertIcon = (type: string) => {
     switch (type) {
@@ -211,7 +249,7 @@ export default function SecurityDashboard() {
               <Shield className="h-5 w-5 text-primary" />
               Security Alerts
             </CardTitle>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => navigate("/alerts")}>
               <Eye className="h-4 w-4 mr-2" />
               View All
             </Button>
@@ -219,52 +257,60 @@ export default function SecurityDashboard() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {mockAlerts.map((alert) => {
-              const AlertIcon = getAlertIcon(alert.type);
-              
-              return (
-                <div
-                  key={alert.id}
-                  className={cn(
-                    "flex items-start gap-4 p-4 rounded-lg border",
-                    "bg-card/50 backdrop-blur-glass hover:bg-card/80 transition-all",
-                    alert.type === 'critical' && 'border-destructive/20',
-                    alert.type === 'warning' && 'border-warning/20',
-                    alert.type === 'info' && 'border-primary/20'
-                  )}
-                >
-                  <div className={cn(
-                    "p-2 rounded-lg",
-                    alert.type === 'critical' && 'bg-destructive/20',
-                    alert.type === 'warning' && 'bg-warning/20',
-                    alert.type === 'info' && 'bg-primary/20'
-                  )}>
-                    <AlertIcon className={cn("h-5 w-5", getAlertColor(alert.type))} />
-                  </div>
-                  
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-medium">{alert.title}</h4>
-                      <Badge 
-                        variant={alert.type === 'critical' ? 'destructive' : 
-                                alert.type === 'warning' ? 'secondary' : 'default'}
-                      >
-                        {alert.type}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{alert.description}</p>
-                    {alert.device && (
-                      <p className="text-xs text-muted-foreground">Device: {alert.device}</p>
+            {alerts.length > 0 ? (
+              alerts.map((alert) => {
+                const AlertIcon = getAlertIcon(alert.type);
+                
+                return (
+                  <div
+                    key={alert.id}
+                    className={cn(
+                      "flex items-start gap-4 p-4 rounded-lg border",
+                      "bg-card/50 backdrop-blur-glass hover:bg-card/80 transition-all",
+                      alert.type === 'critical' && 'border-destructive/20',
+                      alert.type === 'warning' && 'border-warning/20',
+                      alert.type === 'info' && 'border-primary/20'
                     )}
-                    <p className="text-xs text-muted-foreground">{alert.timestamp}</p>
-                  </div>
+                  >
+                    <div className={cn(
+                      "p-2 rounded-lg",
+                      alert.type === 'critical' && 'bg-destructive/20',
+                      alert.type === 'warning' && 'bg-warning/20',
+                      alert.type === 'info' && 'bg-primary/20'
+                    )}>
+                      <AlertIcon className={cn("h-5 w-5", getAlertColor(alert.type))} />
+                    </div>
+                    
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium">{alert.title}</h4>
+                        <Badge 
+                          variant={alert.type === 'critical' ? 'destructive' : 
+                                  alert.type === 'warning' ? 'secondary' : 'default'}
+                        >
+                          {alert.type}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{alert.description}</p>
+                      {alert.device && (
+                        <p className="text-xs text-muted-foreground">Device: {alert.device}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">{alert.timestamp}</p>
+                    </div>
 
-                  <Button variant="ghost" size="sm">
-                    Resolve
-                  </Button>
-                </div>
-              );
-            })}
+                    <Button variant="ghost" size="sm" onClick={() => handleResolve(alert.id)}>
+                      Resolve
+                    </Button>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center text-muted-foreground py-8">
+                <ShieldCheck className="h-12 w-12 mx-auto mb-4 text-success" />
+                <h3 className="font-semibold">All Clear!</h3>
+                <p className="text-sm">No security alerts at the moment.</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -277,21 +323,42 @@ export default function SecurityDashboard() {
             Quick Security Actions
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button className="bg-gradient-primary hover:bg-gradient-accent shadow-glow">
-              <Shield className="h-4 w-4 mr-2" />
-              Run Security Scan
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Button 
+              className="bg-gradient-primary hover:bg-gradient-accent shadow-glow"
+              onClick={handleSecurityScan}
+              disabled={isScanning}
+            >
+              {isScanning ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Shield className="h-4 w-4 mr-2" />
+              )}
+              {isScanning ? 'Scanning...' : 'Run Security Scan'}
             </Button>
-            <Button variant="outline">
-              <Wifi className="h-4 w-4 mr-2" />
-              Check Network Health
-            </Button>
-            <Button variant="outline">
-              <Lock className="h-4 w-4 mr-2" />
-              Update Security Policies
+            <Button variant="outline" onClick={handleUpdatePolicies} disabled={isUpdating}>
+              {isUpdating ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Lock className="h-4 w-4 mr-2" />
+              )}
+              {isUpdating ? 'Updating...' : 'Update Security Policies'}
             </Button>
           </div>
+          {isScanning && (
+            <div className="space-y-2 pt-4">
+              <Progress value={scanProgress} className="h-2" />
+              <p className="text-xs text-muted-foreground text-center">
+                Scanning for vulnerabilities... {scanProgress}%
+              </p>
+            </div>
+          )}
+          {lastUpdated && (
+            <p className="text-xs text-muted-foreground text-center pt-2">
+              Policies last updated: {lastUpdated.toLocaleString()}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

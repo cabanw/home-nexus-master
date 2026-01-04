@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -5,8 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
-  Wifi, 
-  Home, 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { 
   Shield, 
   Activity, 
   Network,
@@ -16,13 +22,14 @@ import {
   Users,
   LogOut,
   Crown,
-  ArrowUpDown
+  HardDrive,
+  Settings,
+  User
 } from "lucide-react";
-import NetworkScanner from "@/components/NetworkScanner";
-import SmartHomePanel from "@/components/SmartHomePanel";
-import NetworkTopology from "@/components/NetworkTopology";
 import SecurityDashboard from "@/components/SecurityDashboard";
 import UserManagement from "@/components/UserManagement";
+import DevicesPage from "@/pages/Devices";
+import FirewallPage from "@/pages/Firewall";
 import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
@@ -82,10 +89,29 @@ const Index = () => {
                     Admin
                   </Badge>
                 )}
-                <span className="text-sm text-muted-foreground">{user.email}</span>
-                <Button variant="ghost" size="sm" onClick={handleSignOut}>
-                  <LogOut className="h-4 w-4" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="gap-2">
+                      <User className="h-4 w-4" />
+                      {user.email}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => navigate("/profile")}>
+                      <User className="h-4 w-4 mr-2" />
+                      Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate("/settings")}>
+                      <Settings className="h-4 w-4 mr-2" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
@@ -95,26 +121,22 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-card/50 backdrop-blur-glass">
+          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} bg-card/50 backdrop-blur-glass`}>
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
               Dashboard
             </TabsTrigger>
-            <TabsTrigger value="scanner" className="flex items-center gap-2">
-              <Wifi className="h-4 w-4" />
-              Scanner
-            </TabsTrigger>
-            <TabsTrigger value="smarthome" className="flex items-center gap-2">
-              <Home className="h-4 w-4" />
-              Smart Home
-            </TabsTrigger>
-            <TabsTrigger value="topology" className="flex items-center gap-2">
-              <Network className="h-4 w-4" />
-              Topology
-            </TabsTrigger>
             <TabsTrigger value="security" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />
               Security
+            </TabsTrigger>
+            <TabsTrigger value="devices" className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4" />
+              Devices
+            </TabsTrigger>
+            <TabsTrigger value="firewall" className="flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              Firewall
             </TabsTrigger>
             {isAdmin && (
               <TabsTrigger value="users" className="flex items-center gap-2">
@@ -241,20 +263,16 @@ const Index = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="scanner">
-            <NetworkScanner />
-          </TabsContent>
-
-          <TabsContent value="smarthome">
-            <SmartHomePanel />
-          </TabsContent>
-
-          <TabsContent value="topology">
-            <NetworkTopology />
-          </TabsContent>
-
           <TabsContent value="security">
             <SecurityDashboard />
+          </TabsContent>
+
+          <TabsContent value="devices">
+            <DevicesPage />
+          </TabsContent>
+
+          <TabsContent value="firewall">
+            <FirewallPage />
           </TabsContent>
 
           {isAdmin && (
