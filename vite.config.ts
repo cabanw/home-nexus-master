@@ -1,9 +1,10 @@
-import { defineConfig, Plugin } from "vite";
+import { defineConfig, Plugin } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { exec } from "child_process";
 import { parseString } from "xml2js";
 import { IncomingMessage, ServerResponse } from "http";
+import { parseNmapHosts } from "./src/utils/nmapParser";
 
 // Vite plugin to create a custom API endpoint for network scanning
 function networkScanApiPlugin(): Plugin {
@@ -11,8 +12,8 @@ function networkScanApiPlugin(): Plugin {
     name: 'network-scan-api',
     configureServer(server) {
       server.middlewares.use('/api/scan', (req: IncomingMessage, res: ServerResponse) => {
-        // Use the locally downloaded nmap binary
-        exec('./nmap -oX - 192.168.1.0/24', { timeout: 30000 }, (error, stdout, stderr) => {
+        const subnet = process.env.SCAN_SUBNET ?? '192.168.1.0/24';
+        exec(`./nmap -oX - ${subnet}`, { timeout: 30000 }, (error, stdout, stderr) => {
           if (error) {
             console.error(`nmap exec error: ${error.message}`);
             res.statusCode = 500;
@@ -34,33 +35,7 @@ function networkScanApiPlugin(): Plugin {
             }
 
             try {
-              // Defensive parsing of the nmap output
-              const hosts = result?.nmaprun?.host || [];
-              const devices = hosts.map((host: any) => {
-                const ipv4 = host.address?.find((addr: any) => addr?.$?.addrtype === 'ipv4');
-                const mac = host.address?.find((addr: any) => addr?.$?.addrtype === 'mac');
-                const vendor = mac?.$?.vendor || null;
-
-                let name = 'Unknown Device';
-                if (host.hostnames?.[0] && host.hostnames[0].hostname?.[0]?.$?.name) {
-                    name = host.hostnames[0].hostname[0].$.name;
-                } else if (vendor) {
-                    name = vendor;
-                }
-                
-                return {
-                  id: mac?.$?.addr || ipv4?.$?.addr || Math.random().toString(),
-                  name: name,
-                  ip: ipv4?.$?.addr || 'N/A',
-                  mac: mac?.$?.addr || 'N/A',
-                  type: 'unknown',
-                  status: host.status?.[0]?.$?.state === 'up' ? 'online' : 'offline',
-                  security: 'unknown',
-                  lastSeen: new Date(host.status?.[0]?.$?.lastchanged * 1000).toISOString(),
-                  bandwidth: 0,
-                };
-              });
-
+              const devices = parseNmapHosts(result);
               res.setHeader('Content-Type', 'application/json');
               res.statusCode = 200;
               res.end(JSON.stringify(devices));
@@ -86,11 +61,20 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    networkScanApiPlugin() // Add the custom plugin
+    networkScanApiPlugin()
   ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    deps: {
+      inline: [/class-variance-authority/],
     },
   },
 }));
