@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      firewall_rules: {
+        Row: {
+          id: string
+          user_id: string
+          source: string
+          destination: string
+          port: string
+          action: 'allow' | 'deny'
+          enabled: boolean
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          source?: string
+          destination?: string
+          port?: string
+          action: 'allow' | 'deny'
+          enabled?: boolean
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          source?: string
+          destination?: string
+          port?: string
+          action?: 'allow' | 'deny'
+          enabled?: boolean
+          created_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null

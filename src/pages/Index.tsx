@@ -1,20 +1,22 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { 
-  Shield, 
-  Activity, 
+import {
+  Shield,
+  Activity,
   Network,
   Router,
   Smartphone,
@@ -31,11 +33,28 @@ import UserManagement from "@/components/UserManagement";
 import DevicesPage from "@/pages/Devices";
 import FirewallPage from "@/pages/Firewall";
 import { useAuth } from "@/hooks/useAuth";
+import { formatDistanceToNow } from "date-fns";
+import type { ScannedDevice } from "@/types/device";
+
+const fetchDevices = (): Promise<ScannedDevice[]> =>
+  fetch("/api/scan").then((r) => r.json());
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const navigate = useNavigate();
   const { user, isAdmin, loading, signOut } = useAuth();
+
+  const { data: devices = [], isLoading: devicesLoading } = useQuery<ScannedDevice[]>({
+    queryKey: ["devices"],
+    queryFn: fetchDevices,
+    staleTime: 60_000,
+    enabled: !!user,
+  });
+
+  const onlineDevices = devices.filter((d) => d.status === "online");
+  const recentDevices = [...devices]
+    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
+    .slice(0, 3);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -73,14 +92,14 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Network & Smart Home Management</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
                 <span className="text-sm text-success">Network Online</span>
               </div>
               <Badge variant="outline" className="bg-primary/10">
-                192.168.1.0/24
+                {import.meta.env.VITE_SCAN_SUBNET ?? '192.168.1.0/24'}
               </Badge>
               <div className="flex items-center gap-2 pl-4 border-l border-border">
                 {isAdmin && (
@@ -157,7 +176,10 @@ const Index = () => {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Network Devices</p>
-                      <p className="text-2xl font-bold">12</p>
+                      {devicesLoading
+                        ? <Skeleton className="h-8 w-12 mt-1" />
+                        : <p className="text-2xl font-bold">{devices.length}</p>
+                      }
                     </div>
                   </div>
                 </CardContent>
@@ -170,8 +192,11 @@ const Index = () => {
                       <Smartphone className="h-5 w-5 text-success" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Smart Devices</p>
-                      <p className="text-2xl font-bold">8</p>
+                      <p className="text-sm text-muted-foreground">Online Devices</p>
+                      {devicesLoading
+                        ? <Skeleton className="h-8 w-12 mt-1" />
+                        : <p className="text-2xl font-bold">{onlineDevices.length}</p>
+                      }
                     </div>
                   </div>
                 </CardContent>
@@ -213,29 +238,32 @@ const Index = () => {
                   <CardTitle>Recent Network Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-success rounded-full" />
-                        <span className="text-sm">iPhone 15 connected</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">2 min ago</span>
+                  {devicesLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
+                          <Skeleton className="h-4 w-40" />
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-warning rounded-full" />
-                        <span className="text-sm">Smart TV firmware update</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">15 min ago</span>
+                  ) : recentDevices.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentDevices.map((device) => (
+                        <div key={device.id} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full ${device.status === 'online' ? 'bg-success' : 'bg-muted-foreground'}`} />
+                            <span className="text-sm">{device.name} — {device.ip}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-destructive rounded-full" />
-                        <span className="text-sm">Security scan detected issue</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">1 hour ago</span>
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 
