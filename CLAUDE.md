@@ -90,7 +90,8 @@ Hay dos protocolos, según el firmware del interruptor:
 - Kasa: 11 interruptores (1 HS220 dimmer, 6 HS200, 4 HS210).
   - El 2026-09-14, durante la sesión, 10 pasaron del protocolo legacy a KLAP v2 por una actualización de firmware (HS200 1.0.11 → 1.1.2, HS210 1.0.10 → 1.1.0): puerto 9999 cerrado, HTTP 80 abierto.
   - Solo el HS220 (firmware 1.0.8) sigue en legacy.
-  - Los KLAP están vinculados a la cuenta (`factory_default: false`). Con `KASA_USERNAME`/`KASA_PASSWORD` se leen los 11 (verificado solo con `get_sysinfo`).
+  - Los KLAP están vinculados a la cuenta (`factory_default: false`). Con `KASA_USERNAME`/`KASA_PASSWORD` se leen los 11.
+  - Verificado por el usuario desde la UI el 2026-09-14: encender/apagar por KLAP (un HS200 y un HS210) y encender/apagar + brillo por legacy (HS220).
 - Otros equipos vistos en el escaneo: Resideo (`.10`) y August Home (`.87`); todavía sin integración.
 - La topología planificada (Linksys MR7200 en `.254`, VLAN 10/20/30 en `172.16.50/60/70.0/24`) todavía **no** está implementada. Cuando exista, agregar esas subredes a `SCAN_SUBNET` y los equipos a `src/config/infrastructure.ts`. Con VLANs y Client Isolation, los broadcasts de descubrimiento no cruzan entre subredes.
 - El repo en GitHub es **público**: no agregar nombres de habitaciones, coordenadas, MACs completas ni otros datos de la casa a archivos versionados.
