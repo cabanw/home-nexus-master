@@ -64,3 +64,34 @@ export function ipInSubnet(ip: string, cidr: string): boolean {
   const value = ipToInt(ip);
   return value >= start && value < start + size;
 }
+
+export function isIPv4(ip: string): boolean {
+  return IPV4_RE.test(ip);
+}
+
+export interface InterfaceAddress {
+  address: string;
+  family: string | number;
+  internal: boolean;
+}
+
+/** This machine's IPv4 address inside the subnet (from os.networkInterfaces()), or null if it has no adapter there. */
+export function localAddressInSubnet(addresses: InterfaceAddress[], cidr: string): string | null {
+  const match = addresses.find(
+    (a) => (a.family === "IPv4" || a.family === 4) && !a.internal && ipInSubnet(a.address, cidr),
+  );
+  return match?.address ?? null;
+}
+
+export function compareIPv4(a: string, b: string): number {
+  return ipToInt(a) - ipToInt(b);
+}
+
+/** Directed broadcast address of a subnet, e.g. 172.16.40.0/24 -> 172.16.40.255. */
+export function subnetBroadcast(cidr: string): string {
+  if (!CIDR_RE.test(cidr)) throw new Error(`Invalid subnet: ${cidr}`);
+  const [base, bits] = cidr.split("/");
+  const size = 2 ** (32 - Number(bits));
+  const last = Math.floor(ipToInt(base) / size) * size + size - 1;
+  return [24, 16, 8, 0].map((shift) => Math.floor(last / 2 ** shift) % 256).join(".");
+}

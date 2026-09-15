@@ -1,13 +1,68 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildNmapArgs,
+  compareIPv4,
   ipInSubnet,
+  isIPv4,
+  localAddressInSubnet,
   parseSubnets,
   resolveNmapPath,
+  subnetBroadcast,
   WINDOWS_NMAP_PATHS,
 } from '@/utils/scanConfig';
 import { applyInventory } from '@/utils/inventory';
 import type { ScannedDevice } from '@/types/device';
+
+describe('localAddressInSubnet', () => {
+  const addresses = [
+    { address: '192.168.254.125', family: 'IPv4', internal: false },
+    { address: '127.0.0.1', family: 'IPv4', internal: true },
+    { address: 'fe80::1', family: 'IPv6', internal: false },
+    { address: '172.16.40.100', family: 'IPv4', internal: false },
+  ];
+
+  it('returns the adapter address inside the subnet', () => {
+    expect(localAddressInSubnet(addresses, '172.16.40.0/24')).toBe('172.16.40.100');
+  });
+
+  it('accepts the numeric family used by older Node versions', () => {
+    expect(localAddressInSubnet([{ address: '10.0.0.5', family: 4, internal: false }], '10.0.0.0/24')).toBe('10.0.0.5');
+  });
+
+  it('returns null when no adapter is on the subnet', () => {
+    expect(localAddressInSubnet(addresses, '172.16.50.0/24')).toBeNull();
+    expect(localAddressInSubnet(addresses, '127.0.0.0/8')).toBeNull();
+  });
+});
+
+describe('subnetBroadcast', () => {
+  it.each([
+    ['172.16.40.0/24', '172.16.40.255'],
+    ['172.16.40.107/25', '172.16.40.127'],
+    ['10.1.0.0/16', '10.1.255.255'],
+    ['192.168.1.7/32', '192.168.1.7'],
+  ])('%s -> %s', (cidr, broadcast) => {
+    expect(subnetBroadcast(cidr)).toBe(broadcast);
+  });
+
+  it('rejects invalid subnets', () => {
+    expect(() => subnetBroadcast('172.16.40.0')).toThrow();
+  });
+});
+
+describe('isIPv4 / compareIPv4', () => {
+  it('validates IPv4 addresses', () => {
+    expect(isIPv4('172.16.40.25')).toBe(true);
+    expect(isIPv4('172.16.40.256')).toBe(false);
+    expect(isIPv4('../etc')).toBe(false);
+  });
+
+  it('sorts addresses numerically', () => {
+    expect(['172.16.40.122', '172.16.40.25', '172.16.40.3'].sort(compareIPv4)).toEqual([
+      '172.16.40.3', '172.16.40.25', '172.16.40.122',
+    ]);
+  });
+});
 
 describe('parseSubnets', () => {
   it('accepts a single subnet', () => {

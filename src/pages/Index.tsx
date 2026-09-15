@@ -24,11 +24,13 @@ import {
   LogOut,
   Crown,
   HardDrive,
+  Lightbulb,
   User
 } from "lucide-react";
 import UserManagement from "@/components/UserManagement";
 import DevicesPage from "@/pages/Devices";
 import FirewallPage from "@/pages/Firewall";
+import SmartHomePage from "@/pages/SmartHome";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -140,7 +142,7 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} bg-card/50 backdrop-blur-glass`}>
+          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} bg-card/50 backdrop-blur-glass`}>
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
               Dashboard
@@ -148,6 +150,10 @@ const Index = () => {
             <TabsTrigger value="devices" className="flex items-center gap-2">
               <HardDrive className="h-4 w-4" />
               Devices
+            </TabsTrigger>
+            <TabsTrigger value="smart-home" className="flex items-center gap-2">
+              <Lightbulb className="h-4 w-4" />
+              Smart Home
             </TabsTrigger>
             <TabsTrigger value="firewall" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />
@@ -236,6 +242,10 @@ const Index = () => {
 
           <TabsContent value="devices">
             <DevicesPage />
+          </TabsContent>
+
+          <TabsContent value="smart-home">
+            <SmartHomePage />
           </TabsContent>
 
           <TabsContent value="firewall">
