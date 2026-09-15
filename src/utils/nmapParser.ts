@@ -1,14 +1,6 @@
-export interface ScannedDevice {
-  id: string;
-  name: string;
-  ip: string;
-  mac: string;
-  type: string;
-  status: 'online' | 'offline';
-  security: string;
-  lastSeen: string;
-  bandwidth: number;
-}
+import type { ScannedDevice } from '../types/device';
+
+export type { ScannedDevice };
 
 export function parseNmapHost(host: any): ScannedDevice {
   const ipv4 = host.address?.find((addr: any) => addr?.$?.addrtype === 'ipv4');
@@ -34,9 +26,7 @@ export function parseNmapHost(host: any): ScannedDevice {
     mac: mac?.$?.addr ?? 'N/A',
     type: 'unknown',
     status: host.status?.[0]?.$?.state === 'up' ? 'online' : 'offline',
-    security: 'unknown',
     lastSeen: new Date(lastSeenMs).toISOString(),
-    bandwidth: 0,
   };
 }
 

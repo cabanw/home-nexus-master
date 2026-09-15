@@ -20,19 +20,17 @@ import {
   Network,
   Router,
   Smartphone,
-  Monitor,
   Users,
   LogOut,
   Crown,
   HardDrive,
-  Settings,
   User
 } from "lucide-react";
-import SecurityDashboard from "@/components/SecurityDashboard";
 import UserManagement from "@/components/UserManagement";
 import DevicesPage from "@/pages/Devices";
 import FirewallPage from "@/pages/Firewall";
 import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { fetchScan, SCAN_QUERY_KEY } from "@/lib/scanApi";
 
@@ -41,7 +39,7 @@ const Index = () => {
   const navigate = useNavigate();
   const { user, isAdmin, loading, signOut } = useAuth();
 
-  const { data: scan, isLoading: devicesLoading } = useQuery({
+  const { data: scan, isLoading: devicesLoading, isError: scanFailed } = useQuery({
     queryKey: SCAN_QUERY_KEY,
     queryFn: fetchScan,
     staleTime: 60_000,
@@ -55,6 +53,12 @@ const Index = () => {
     .filter((d) => d.lastSeen)
     .sort((a, b) => new Date(b.lastSeen!).getTime() - new Date(a.lastSeen!).getTime())
     .slice(0, 3);
+
+  const scanStatus = scanFailed
+    ? { label: "Scan failed", dot: "bg-destructive", text: "text-destructive" }
+    : scan
+      ? { label: "Scan OK", dot: "bg-success", text: "text-success" }
+      : { label: "Scanning...", dot: "bg-muted-foreground animate-pulse", text: "text-muted-foreground" };
 
   useEffect(() => {
     if (!loading && !user) {
@@ -89,14 +93,14 @@ const Index = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold">NetControl Pro</h1>
-                <p className="text-sm text-muted-foreground">Network & Smart Home Management</p>
+                <p className="text-sm text-muted-foreground">Network Management</p>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
-                <span className="text-sm text-success">Network Online</span>
+                <div className={cn("w-2 h-2 rounded-full", scanStatus.dot)} />
+                <span className={cn("text-sm", scanStatus.text)}>{scanStatus.label}</span>
               </div>
               <Badge variant="outline" className="bg-primary/10">
                 {scan?.subnets.join(", ") ?? "No scan yet"}
@@ -120,10 +124,6 @@ const Index = () => {
                       <User className="h-4 w-4 mr-2" />
                       Profile
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate("/settings")}>
-                      <Settings className="h-4 w-4 mr-2" />
-                      Settings
-                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
                       <LogOut className="h-4 w-4 mr-2" />
@@ -140,14 +140,10 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} bg-card/50 backdrop-blur-glass`}>
+          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} bg-card/50 backdrop-blur-glass`}>
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
               Dashboard
-            </TabsTrigger>
-            <TabsTrigger value="security" className="flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              Security
             </TabsTrigger>
             <TabsTrigger value="devices" className="flex items-center gap-2">
               <HardDrive className="h-4 w-4" />
@@ -167,7 +163,7 @@ const Index = () => {
 
           <TabsContent value="dashboard" className="space-y-6">
             {/* Overview Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="bg-gradient-card border-border shadow-card">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
@@ -201,98 +197,41 @@ const Index = () => {
                   </div>
                 </CardContent>
               </Card>
-
-              <Card className="bg-gradient-card border-border shadow-card">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-warning/20 rounded-lg">
-                      <Shield className="h-5 w-5 text-warning" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Security Score</p>
-                      <p className="text-2xl font-bold">78%</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-card border-border shadow-card">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-accent/20 rounded-lg">
-                      <Monitor className="h-5 w-5 text-accent" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Bandwidth Usage</p>
-                      <p className="text-2xl font-bold">245 Mbps</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
-            {/* Quick Access */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-gradient-card border-border shadow-card">
-                <CardHeader>
-                  <CardTitle>Recent Network Activity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {devicesLoading ? (
-                    <div className="space-y-3">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
-                          <Skeleton className="h-4 w-40" />
-                          <Skeleton className="h-3 w-16" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : recentDevices.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {recentDevices.map((device) => (
-                        <div key={device.id} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-2 h-2 rounded-full ${device.status === 'online' ? 'bg-success' : 'bg-muted-foreground'}`} />
-                            <span className="text-sm">{device.name} — {device.ip}</span>
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-card border-border shadow-card">
-                <CardHeader>
-                  <CardTitle>Smart Home Status</CardTitle>
-                </CardHeader>
-                <CardContent>
+            <Card className="bg-gradient-card border-border shadow-card">
+              <CardHeader>
+                <CardTitle>Recent Network Activity</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {devicesLoading ? (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
-                      <span className="text-sm">Living Room Lights</span>
-                      <Badge className="bg-success/20 text-success">ON</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
-                      <span className="text-sm">Main Thermostat</span>
-                      <Badge className="bg-primary/20 text-primary">72°F</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
-                      <span className="text-sm">Security System</span>
-                      <Badge className="bg-success/20 text-success">ARMED</Badge>
-                    </div>
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-16" />
+                      </div>
+                    ))}
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="security">
-            <SecurityDashboard />
+                ) : recentDevices.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
+                ) : (
+                  <div className="space-y-3">
+                    {recentDevices.map((device) => (
+                      <div key={device.id} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2 h-2 rounded-full ${device.status === 'online' ? 'bg-success' : 'bg-muted-foreground'}`} />
+                          <span className="text-sm">{device.name} — {device.ip}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(device.lastSeen!), { addSuffix: true })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="devices">

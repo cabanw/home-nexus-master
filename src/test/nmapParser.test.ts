@@ -19,7 +19,6 @@ describe('parseNmapHost', () => {
     expect(device.name).toBe('my-device.local');
     expect(device.status).toBe('online');
     expect(device.lastSeen).toBe(new Date(1700000000 * 1000).toISOString());
-    expect(device.bandwidth).toBe(0);
     expect(device.type).toBe('unknown');
   });
 

@@ -38,9 +38,7 @@ const mockDevice: ScannedDevice = {
   mac: 'AA:BB:CC:DD:EE:FF',
   type: 'unknown',
   status: 'online',
-  security: 'unknown',
   lastSeen: new Date().toISOString(),
-  bandwidth: 0,
 };
 
 const makeScan = (devices: ScannedDevice[]) => ({

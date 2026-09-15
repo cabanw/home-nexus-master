@@ -35,9 +35,7 @@ export function applyInventory(
       mac: "N/A",
       type: d.role,
       status: "offline",
-      security: "unknown",
       lastSeen: null,
-      bandwidth: 0,
     }));
 
   return [...labeled, ...missing];

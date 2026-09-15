@@ -122,7 +122,7 @@ const Auth = () => {
             NetControl Pro
           </CardTitle>
           <CardDescription>
-            Network Management & Smart Home Control
+            Network Management
           </CardDescription>
         </CardHeader>
         

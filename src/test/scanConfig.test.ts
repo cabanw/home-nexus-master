@@ -91,9 +91,7 @@ describe('applyInventory', () => {
     mac: '38:A0:67:63:23:F2',
     type: 'unknown',
     status: 'online',
-    security: 'unknown',
     lastSeen: '2026-09-14T00:00:00.000Z',
-    bandwidth: 0,
   };
 
   it('labels scanned devices that match the inventory', () => {
