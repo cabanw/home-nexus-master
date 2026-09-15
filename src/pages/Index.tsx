@@ -34,26 +34,26 @@ import DevicesPage from "@/pages/Devices";
 import FirewallPage from "@/pages/Firewall";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDistanceToNow } from "date-fns";
-import type { ScannedDevice } from "@/types/device";
-
-const fetchDevices = (): Promise<ScannedDevice[]> =>
-  fetch("/api/scan").then((r) => r.json());
+import { fetchScan, SCAN_QUERY_KEY } from "@/lib/scanApi";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const navigate = useNavigate();
   const { user, isAdmin, loading, signOut } = useAuth();
 
-  const { data: devices = [], isLoading: devicesLoading } = useQuery<ScannedDevice[]>({
-    queryKey: ["devices"],
-    queryFn: fetchDevices,
+  const { data: scan, isLoading: devicesLoading } = useQuery({
+    queryKey: SCAN_QUERY_KEY,
+    queryFn: fetchScan,
     staleTime: 60_000,
+    retry: false,
     enabled: !!user,
   });
 
+  const devices = scan?.devices ?? [];
   const onlineDevices = devices.filter((d) => d.status === "online");
-  const recentDevices = [...devices]
-    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
+  const recentDevices = devices
+    .filter((d) => d.lastSeen)
+    .sort((a, b) => new Date(b.lastSeen!).getTime() - new Date(a.lastSeen!).getTime())
     .slice(0, 3);
 
   useEffect(() => {
@@ -99,7 +99,7 @@ const Index = () => {
                 <span className="text-sm text-success">Network Online</span>
               </div>
               <Badge variant="outline" className="bg-primary/10">
-                {import.meta.env.VITE_SCAN_SUBNET ?? '192.168.1.0/24'}
+                {scan?.subnets.join(", ") ?? "No scan yet"}
               </Badge>
               <div className="flex items-center gap-2 pl-4 border-l border-border">
                 {isAdmin && (
