@@ -5,16 +5,33 @@ import path from "path";
 import { existsSync } from "fs";
 import { execFile } from "child_process";
 import { parseString } from "xml2js";
-import type { ServerResponse } from "http";
+import type { IncomingMessage, ServerResponse } from "http";
 import { parseNmapHosts } from "./src/utils/nmapParser";
-import { buildNmapArgs, parseSubnets, resolveNmapPath } from "./src/utils/scanConfig";
+import {
+  buildNmapArgs,
+  compareIPv4,
+  ipInSubnet,
+  isIPv4,
+  parseSubnets,
+  resolveNmapPath,
+} from "./src/utils/scanConfig";
 import { applyInventory } from "./src/utils/inventory";
 import { KNOWN_INFRASTRUCTURE } from "./src/config/infrastructure";
+import { validateStateChange } from "./src/utils/kasaProtocol";
+import { discoverKasaDevices, getKasaDevice, setKasaState, type KasaCredentials } from "./server/kasa";
 import type { ScanResult } from "./src/types/device";
+import type { KasaDevice, KasaDiscoveryResult } from "./src/types/kasa";
 
 const SCAN_TIMEOUT_MS = 120_000;
 // Windows STATUS_DLL_NOT_FOUND (0xC0000135), seen as a signed or unsigned exit code.
 const DLL_NOT_FOUND_EXIT_CODES = [-1073741515, 3221225781];
+const MAX_JSON_BODY_BYTES = 1024;
+
+class HttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status;
@@ -22,7 +39,38 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-// The scan endpoint runs nmap on this machine, so only signed-in app users may call it.
+function sendError(res: ServerResponse, err: unknown, label: string) {
+  const status = err instanceof HttpError ? err.status : 500;
+  const message = err instanceof Error ? err.message : String(err);
+  if (status >= 500) console.error(`${label}: ${message}`);
+  sendJson(res, status, { message: status >= 500 ? `${label}: ${message}` : message });
+}
+
+function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_JSON_BODY_BYTES) {
+        reject(new HttpError(413, "Request body is too large."));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "null"));
+      } catch {
+        reject(new HttpError(400, "Request body must be JSON."));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+// The dev-server APIs act on this machine and the LAN, so only signed-in app users may call them.
 async function isSignedIn(authorization: string | undefined, env: Record<string, string>): Promise<boolean> {
   const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!token || !env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_PUBLISHABLE_KEY) return false;
@@ -112,9 +160,99 @@ function networkScanApiPlugin(env: Record<string, string>): Plugin {
   };
 }
 
+// Vite plugin to read and switch TP-Link Kasa devices over the LAN (legacy protocol or KLAP)
+function kasaApiPlugin(env: Record<string, string>): Plugin {
+  // TP-Link account for KLAP devices. Server-only: these variables have no VITE_ prefix.
+  const credentials: KasaCredentials | null =
+    env.KASA_USERNAME && env.KASA_PASSWORD ? { username: env.KASA_USERNAME, password: env.KASA_PASSWORD } : null;
+  const known = new Map<string, KasaDevice>();
+  let inFlight: Promise<KasaDiscoveryResult> | null = null;
+
+  const discover = async (): Promise<KasaDiscoveryResult> => {
+    const subnets = parseSubnets(env.SCAN_SUBNET);
+    const started = Date.now();
+    const { devices: answered, locked, skippedSubnets } = await discoverKasaDevices(subnets, credentials);
+    for (const device of answered) known.set(device.ip, device);
+    // A switch that moved to KLAP without credentials is listed as locked, not as a stale offline switch.
+    for (const device of locked) known.delete(device.ip);
+
+    // A switch can miss the broadcast: ask the ones seen before directly, and mark them offline if they stay silent.
+    const answeredIps = new Set(answered.map((d) => d.ip));
+    const silent = [...known.values()].filter((d) => !answeredIps.has(d.ip));
+    const rechecked = await Promise.all(
+      silent.map((d) =>
+        getKasaDevice(d.ip, d.protocol, credentials).catch((): KasaDevice => ({ ...d, online: false })),
+      ),
+    );
+    for (const device of rechecked) known.set(device.ip, device);
+
+    const devices = [...known.values()]
+      .filter((d) => subnets.some((s) => ipInSubnet(d.ip, s)))
+      .sort((a, b) => compareIPv4(a.ip, b.ip));
+    return {
+      subnets,
+      skippedSubnets,
+      locked,
+      discoveredAt: new Date().toISOString(),
+      durationMs: Date.now() - started,
+      devices,
+    };
+  };
+
+  return {
+    name: "kasa-api",
+    configureServer(server) {
+      server.middlewares.use("/api/kasa/devices", async (req, res) => {
+        if (!(await isSignedIn(req.headers.authorization, env))) {
+          sendJson(res, 401, { message: "Sign in to use Kasa devices." });
+          return;
+        }
+
+        try {
+          const route = (req.url ?? "/").split("?")[0];
+
+          if (route === "/" || route === "") {
+            if (req.method !== "GET") throw new HttpError(405, "Method not allowed.");
+            inFlight ??= discover().finally(() => {
+              inFlight = null;
+            });
+            sendJson(res, 200, await inFlight);
+            return;
+          }
+
+          const stateRoute = route.match(/^\/([^/]+)\/state\/?$/);
+          if (!stateRoute) throw new HttpError(404, "Not found.");
+          if (req.method !== "POST") throw new HttpError(405, "Method not allowed.");
+
+          const ip = decodeURIComponent(stateRoute[1]);
+          const subnets = parseSubnets(env.SCAN_SUBNET);
+          const device = isIPv4(ip) && subnets.some((s) => ipInSubnet(ip, s)) ? known.get(ip) : undefined;
+          if (!device) throw new HttpError(404, "Unknown Kasa device. Refresh the device list first.");
+
+          let change;
+          try {
+            change = validateStateChange(await readJsonBody(req));
+          } catch (err) {
+            throw err instanceof HttpError ? err : new HttpError(400, err instanceof Error ? err.message : String(err));
+          }
+          if (change.brightness !== undefined && device.brightness === null) {
+            throw new HttpError(400, `${device.alias} is not a dimmer.`);
+          }
+
+          const updated = await setKasaState(ip, device.protocol, credentials, change);
+          known.set(ip, updated);
+          sendJson(res, 200, updated);
+        } catch (err) {
+          sendError(res, err, "Kasa request failed");
+        }
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load every .env variable (not only VITE_*) so the scan settings reach the server.
+  // Load every .env variable (not only VITE_*) so the server-side settings reach the plugins.
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
@@ -122,7 +260,7 @@ export default defineConfig(({ mode }) => {
       host: "::",
       port: 8080,
     },
-    plugins: [react(), networkScanApiPlugin(env)],
+    plugins: [react(), networkScanApiPlugin(env), kasaApiPlugin(env)],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
@@ -132,7 +270,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
-      include: ["src/**/*.{test,spec}.{ts,tsx}"],
+      include: ["src/**/*.{test,spec}.{ts,tsx}", "server/**/*.test.ts"],
       deps: {
         inline: [/class-variance-authority/],
       },
