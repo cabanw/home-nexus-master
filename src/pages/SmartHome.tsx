@@ -6,12 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { Lightbulb, RefreshCw, WifiOff } from "lucide-react";
+import { Lightbulb, Lock, RefreshCw, WifiOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { fetchKasaDevices, KASA_QUERY_KEY, setKasaDeviceState } from "@/lib/kasaApi";
-import type { KasaDiscoveryResult, KasaStateChange } from "@/types/kasa";
+import type { KasaDiscoveryResult, KasaLockedDevice, KasaStateChange } from "@/types/kasa";
 
 export default function SmartHomePage() {
   const queryClient = useQueryClient();
@@ -36,8 +36,15 @@ export default function SmartHomePage() {
   });
 
   const devices = data?.devices ?? [];
+  const locked = data?.locked ?? [];
   const onCount = devices.filter((d) => d.online && d.on).length;
   const pendingIp = stateMutation.isPending ? stateMutation.variables?.ip : null;
+
+  // Locked switches usually share one reason (e.g. missing credentials), so they are grouped by it.
+  const lockedByReason = new Map<string, KasaLockedDevice[]>();
+  for (const device of locked) {
+    lockedByReason.set(device.reason, [...(lockedByReason.get(device.reason) ?? []), device]);
+  }
 
   const clearDraft = (ip: string) =>
     setDraftBrightness(({ [ip]: _, ...rest }) => rest);
@@ -98,7 +105,7 @@ export default function SmartHomePage() {
           </div>
         )}
 
-        {!isLoading && !isError && devices.length === 0 && (
+        {!isLoading && !isError && devices.length === 0 && locked.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-10 text-muted-foreground">
             <WifiOff className="h-10 w-10" />
             <p className="text-sm">No Kasa switches answered on the network.</p>
@@ -123,6 +130,7 @@ export default function SmartHomePage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{device.alias}</p>
+                        {device.protocol === "klap" && <Badge variant="outline">KLAP</Badge>}
                         {!device.online && <Badge variant="secondary">offline</Badge>}
                       </div>
                       <p className="text-sm text-muted-foreground">
@@ -166,6 +174,27 @@ export default function SmartHomePage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {!isLoading && !isError && locked.length > 0 && (
+          <div className={cn("space-y-3", devices.length > 0 && "mt-6")}>
+            <p className="text-sm font-medium flex items-center gap-2">
+              <Lock className="h-4 w-4 text-warning" />
+              Not controllable yet ({locked.length})
+            </p>
+            {[...lockedByReason.entries()].map(([reason, group]) => (
+              <div key={reason} className="p-4 rounded-lg border border-warning/30 bg-card/30 space-y-2">
+                <p className="text-sm text-muted-foreground">{reason}</p>
+                <div className="flex flex-wrap gap-2">
+                  {group.map((device) => (
+                    <Badge key={device.ip} variant="outline">
+                      {device.model} | {device.ip}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </CardContent>

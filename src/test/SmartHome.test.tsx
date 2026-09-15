@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import SmartHomePage from '@/pages/SmartHome';
-import type { KasaDevice } from '@/types/kasa';
+import type { KasaDevice, KasaLockedDevice } from '@/types/kasa';
 
 vi.mock('@tanstack/react-query', async () => {
   const actual = await vi.importActual('@tanstack/react-query');
@@ -35,6 +35,7 @@ const makeDevice = (overrides: Partial<KasaDevice> = {}): KasaDevice => ({
   model: 'HS200(US)',
   deviceName: 'Smart Wi-Fi Light Switch',
   mac: '28:EE:52:00:00:01',
+  protocol: 'legacy',
   on: false,
   brightness: null,
   firmware: '1.0.11',
@@ -43,9 +44,12 @@ const makeDevice = (overrides: Partial<KasaDevice> = {}): KasaDevice => ({
   ...overrides,
 });
 
-const mockDiscovery = (devices: KasaDevice[], subnets = ['192.168.1.0/24'], skippedSubnets: string[] = []) =>
+const mockDiscovery = (
+  devices: KasaDevice[],
+  { subnets = ['192.168.1.0/24'], skippedSubnets = [] as string[], locked = [] as KasaLockedDevice[] } = {},
+) =>
   vi.mocked(useQuery).mockReturnValue({
-    data: { subnets, skippedSubnets, discoveredAt: new Date().toISOString(), durationMs: 3100, devices },
+    data: { subnets, skippedSubnets, locked, discoveredAt: new Date().toISOString(), durationMs: 3100, devices },
     isLoading: false,
     isError: false,
     isFetching: false,
@@ -90,21 +94,39 @@ describe('SmartHomePage', () => {
   });
 
   it('lists switches with how many are on', () => {
-    mockDiscovery([makeDevice(), makeDevice({ id: 'b', ip: '192.168.1.21', alias: 'Porch', on: true })]);
+    mockDiscovery([makeDevice(), makeDevice({ id: 'b', ip: '192.168.1.21', alias: 'Porch', on: true, protocol: 'klap' })]);
 
     render(<SmartHomePage />);
     expect(screen.getByText('Kitchen')).toBeInTheDocument();
     expect(screen.getByText('HS200(US) | 192.168.1.20')).toBeInTheDocument();
     expect(screen.getByText('1/2 on')).toBeInTheDocument();
+    expect(screen.getAllByText('KLAP')).toHaveLength(1);
     expect(screen.getByText(/Discovered on 192\.168\.1\.0\/24 in 3\.1s/)).toBeInTheDocument();
   });
 
   it('warns about subnets that broadcast discovery cannot reach', () => {
-    mockDiscovery([makeDevice()], ['192.168.1.0/24', '192.168.50.0/24'], ['192.168.50.0/24']);
+    mockDiscovery([makeDevice()], { subnets: ['192.168.1.0/24', '192.168.50.0/24'], skippedSubnets: ['192.168.50.0/24'] });
 
     render(<SmartHomePage />);
     expect(screen.getByText(/Discovered on 192\.168\.1\.0\/24 in/)).toBeInTheDocument();
     expect(screen.getByText('Not reachable by broadcast from this computer: 192.168.50.0/24')).toBeInTheDocument();
+  });
+
+  it('groups switches that cannot be controlled by reason, without switches', () => {
+    const reason = 'Add KASA_USERNAME and KASA_PASSWORD to .env to read and control it.';
+    mockDiscovery([], {
+      locked: [
+        { ip: '192.168.1.25', model: 'HS200(US)', mac: '28:EE:52:00:00:25', reason },
+        { ip: '192.168.1.27', model: 'HS210(US)', mac: '28:EE:52:00:00:27', reason },
+      ],
+    });
+
+    render(<SmartHomePage />);
+    expect(screen.getByText('Not controllable yet (2)')).toBeInTheDocument();
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+    expect(screen.getByText('HS210(US) | 192.168.1.27')).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.queryByText(/no kasa switches answered/i)).not.toBeInTheDocument();
   });
 
   it('sends the new state when a switch is toggled', () => {

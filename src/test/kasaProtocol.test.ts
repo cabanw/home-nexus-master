@@ -4,9 +4,11 @@ import {
   assertKasaOk,
   buildStateCommands,
   decrypt,
+  DISCOVERY_V2_QUERY,
   encrypt,
   frame,
   GET_SYSINFO,
+  parseDiscoveryV2Reply,
   parseSysinfo,
   unframe,
   validateStateChange,
@@ -29,6 +31,25 @@ const hs200Sysinfo = {
       err_code: 0,
     },
   },
+};
+
+const discoveryReply = (result: object, errorCode = 0) => {
+  const json = new TextEncoder().encode(JSON.stringify({ result, error_code: errorCode }));
+  const bytes = new Uint8Array(16 + json.length);
+  bytes.set([2, 0, 0, 1], 0);
+  bytes.set(json, 16);
+  return bytes;
+};
+
+const klapSwitch = {
+  device_id: 'cloud-device-id',
+  owner: 'owner-hash',
+  device_type: 'IOT.SMARTPLUGSWITCH',
+  device_model: 'HS200(US)',
+  ip: '172.16.40.25',
+  mac: '28-ee-52-00-00-01',
+  factory_default: false,
+  mgt_encrypt_schm: { is_support_https: false, encrypt_type: 'KLAP', http_port: 80, lv: 2 },
 };
 
 describe('encrypt / decrypt', () => {
@@ -64,12 +85,17 @@ describe('parseSysinfo', () => {
       model: 'HS200(US)',
       deviceName: 'Smart Wi-Fi Light Switch',
       mac: '28:EE:52:00:00:01',
+      protocol: 'legacy',
       on: true,
       brightness: null,
       firmware: '1.0.11 Build 230908 Rel.160526',
       online: true,
       lastSeen: '2026-09-14T12:00:00.000Z',
     });
+  });
+
+  it('records the protocol the reply came through', () => {
+    expect(parseSysinfo('172.16.40.25', hs200Sysinfo, seenAt, 'klap').protocol).toBe('klap');
   });
 
   it('never copies location data from the device', () => {
@@ -94,6 +120,36 @@ describe('parseSysinfo', () => {
     ['a power strip', { system: { get_sysinfo: { ...hs200Sysinfo.system.get_sysinfo, children: [{}] } } }],
   ])('rejects %s', (_, reply) => {
     expect(() => parseSysinfo('172.16.40.99', reply, seenAt)).toThrow();
+  });
+});
+
+describe('parseDiscoveryV2Reply', () => {
+  it('uses the static 16-byte discovery query', () => {
+    expect(Array.from(DISCOVERY_V2_QUERY)).toEqual([2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0x46, 0x3c, 0xb5, 0xd3]);
+  });
+
+  it('reads a KLAP switch and normalizes its MAC', () => {
+    expect(parseDiscoveryV2Reply('172.16.40.25', discoveryReply(klapSwitch))).toEqual({
+      ip: '172.16.40.25',
+      model: 'HS200(US)',
+      mac: '28:EE:52:00:00:01',
+      encryptType: 'KLAP',
+      httpPort: 80,
+    });
+  });
+
+  it('never copies the cloud device id or owner hash', () => {
+    const json = JSON.stringify(parseDiscoveryV2Reply('172.16.40.25', discoveryReply(klapSwitch)));
+    expect(json).not.toContain('cloud-device-id');
+    expect(json).not.toContain('owner-hash');
+  });
+
+  it.each([
+    ['a short packet', new Uint8Array(16)],
+    ['an error reply', discoveryReply(klapSwitch, -1)],
+    ['a camera', discoveryReply({ ...klapSwitch, device_type: 'SMART.IPCAMERA' })],
+  ])('rejects %s', (_, bytes) => {
+    expect(() => parseDiscoveryV2Reply('172.16.40.25', bytes)).toThrow();
   });
 });
 

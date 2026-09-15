@@ -1,10 +1,23 @@
-import type { KasaDevice, KasaStateChange } from "../types/kasa";
+import type { KasaDevice, KasaProtocol, KasaStateChange } from "../types/kasa";
 
 /** TP-Link Kasa local protocol: JSON over TCP/UDP port 9999, obfuscated with an XOR autokey cipher. */
 export const KASA_PORT = 9999;
 const INITIAL_KEY = 171;
 
 export const GET_SYSINFO = { system: { get_sysinfo: {} } };
+
+/** Devices on the encrypted protocol answer discovery on UDP 20002 instead of 9999. */
+export const DISCOVERY_V2_PORT = 20002;
+const DISCOVERY_V2_HEADER_BYTES = 16;
+
+function hexToBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+/** Static TP-Link discovery query for port 20002; it carries no credentials. */
+export const DISCOVERY_V2_QUERY = hexToBytes("020000010000000000000000463cb5d3");
 
 export function encrypt(text: string): Uint8Array {
   const bytes = new TextEncoder().encode(text);
@@ -60,7 +73,7 @@ interface RawSysinfo {
  * are copied: the raw reply also contains data such as the home's latitude and
  * longitude, which must never be forwarded to the browser.
  */
-export function parseSysinfo(ip: string, response: unknown, seenAt: Date): KasaDevice {
+export function parseSysinfo(ip: string, response: unknown, seenAt: Date, protocol: KasaProtocol = "legacy"): KasaDevice {
   const sysinfo = (response as { system?: { get_sysinfo?: RawSysinfo } } | null)?.system?.get_sysinfo;
   if (!sysinfo || typeof sysinfo !== "object") {
     throw new Error(`No sysinfo in reply from ${ip}.`);
@@ -78,11 +91,53 @@ export function parseSysinfo(ip: string, response: unknown, seenAt: Date): KasaD
     model: sysinfo.model ?? "unknown",
     deviceName: sysinfo.dev_name ?? "",
     mac: sysinfo.mac ?? "N/A",
+    protocol,
     on: sysinfo.relay_state === 1,
     brightness: typeof sysinfo.brightness === "number" ? sysinfo.brightness : null,
     firmware: sysinfo.sw_ver ?? "",
     online: true,
     lastSeen: seenAt.toISOString(),
+  };
+}
+
+export interface KasaEncryptedDeviceInfo {
+  ip: string;
+  model: string;
+  mac: string;
+  encryptType: string;
+  httpPort: number;
+}
+
+interface RawDiscoveryV2Reply {
+  error_code?: number;
+  result?: {
+    device_type?: string;
+    device_model?: string;
+    mac?: string;
+    mgt_encrypt_schm?: { encrypt_type?: string; http_port?: number };
+  };
+}
+
+/**
+ * Parses a UDP 20002 discovery reply (16-byte header + JSON). Only whitelisted
+ * fields are kept: the reply also carries the cloud device id and an owner hash.
+ */
+export function parseDiscoveryV2Reply(ip: string, bytes: Uint8Array): KasaEncryptedDeviceInfo {
+  if (bytes.length <= DISCOVERY_V2_HEADER_BYTES) throw new Error(`Short discovery reply from ${ip}.`);
+
+  const reply = JSON.parse(new TextDecoder().decode(bytes.subarray(DISCOVERY_V2_HEADER_BYTES))) as RawDiscoveryV2Reply;
+  const result = reply.result;
+  if (!result || reply.error_code !== 0) throw new Error(`Discovery error from ${ip}.`);
+  if (result.device_type !== "IOT.SMARTPLUGSWITCH") {
+    throw new Error(`Unsupported device type at ${ip} (${result.device_type ?? "unknown"}).`);
+  }
+
+  return {
+    ip,
+    model: result.device_model ?? "unknown",
+    mac: (result.mac ?? "N/A").replace(/-/g, ":").toUpperCase(),
+    encryptType: result.mgt_encrypt_schm?.encrypt_type ?? "unknown",
+    httpPort: result.mgt_encrypt_schm?.http_port ?? 80,
   };
 }
 

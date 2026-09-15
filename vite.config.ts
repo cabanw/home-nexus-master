@@ -18,7 +18,7 @@ import {
 import { applyInventory } from "./src/utils/inventory";
 import { KNOWN_INFRASTRUCTURE } from "./src/config/infrastructure";
 import { validateStateChange } from "./src/utils/kasaProtocol";
-import { discoverKasaDevices, getKasaDevice, setKasaState } from "./server/kasa";
+import { discoverKasaDevices, getKasaDevice, setKasaState, type KasaCredentials } from "./server/kasa";
 import type { ScanResult } from "./src/types/device";
 import type { KasaDevice, KasaDiscoveryResult } from "./src/types/kasa";
 
@@ -160,22 +160,29 @@ function networkScanApiPlugin(env: Record<string, string>): Plugin {
   };
 }
 
-// Vite plugin to read and switch TP-Link Kasa devices over the LAN (local protocol, no cloud account)
+// Vite plugin to read and switch TP-Link Kasa devices over the LAN (legacy protocol or KLAP)
 function kasaApiPlugin(env: Record<string, string>): Plugin {
+  // TP-Link account for KLAP devices. Server-only: these variables have no VITE_ prefix.
+  const credentials: KasaCredentials | null =
+    env.KASA_USERNAME && env.KASA_PASSWORD ? { username: env.KASA_USERNAME, password: env.KASA_PASSWORD } : null;
   const known = new Map<string, KasaDevice>();
   let inFlight: Promise<KasaDiscoveryResult> | null = null;
 
   const discover = async (): Promise<KasaDiscoveryResult> => {
     const subnets = parseSubnets(env.SCAN_SUBNET);
     const started = Date.now();
-    const { devices: answered, skippedSubnets } = await discoverKasaDevices(subnets);
+    const { devices: answered, locked, skippedSubnets } = await discoverKasaDevices(subnets, credentials);
     for (const device of answered) known.set(device.ip, device);
+    // A switch that moved to KLAP without credentials is listed as locked, not as a stale offline switch.
+    for (const device of locked) known.delete(device.ip);
 
     // A switch can miss the broadcast: ask the ones seen before directly, and mark them offline if they stay silent.
     const answeredIps = new Set(answered.map((d) => d.ip));
     const silent = [...known.values()].filter((d) => !answeredIps.has(d.ip));
     const rechecked = await Promise.all(
-      silent.map((d) => getKasaDevice(d.ip).catch((): KasaDevice => ({ ...d, online: false }))),
+      silent.map((d) =>
+        getKasaDevice(d.ip, d.protocol, credentials).catch((): KasaDevice => ({ ...d, online: false })),
+      ),
     );
     for (const device of rechecked) known.set(device.ip, device);
 
@@ -185,6 +192,7 @@ function kasaApiPlugin(env: Record<string, string>): Plugin {
     return {
       subnets,
       skippedSubnets,
+      locked,
       discoveredAt: new Date().toISOString(),
       durationMs: Date.now() - started,
       devices,
@@ -231,7 +239,7 @@ function kasaApiPlugin(env: Record<string, string>): Plugin {
             throw new HttpError(400, `${device.alias} is not a dimmer.`);
           }
 
-          const updated = await setKasaState(ip, change);
+          const updated = await setKasaState(ip, device.protocol, credentials, change);
           known.set(ip, updated);
           sendJson(res, 200, updated);
         } catch (err) {
@@ -244,7 +252,7 @@ function kasaApiPlugin(env: Record<string, string>): Plugin {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load every .env variable (not only VITE_*) so the scan settings reach the server.
+  // Load every .env variable (not only VITE_*) so the server-side settings reach the plugins.
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
@@ -262,7 +270,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
-      include: ["src/**/*.{test,spec}.{ts,tsx}"],
+      include: ["src/**/*.{test,spec}.{ts,tsx}", "server/**/*.test.ts"],
       deps: {
         inline: [/class-variance-authority/],
       },
