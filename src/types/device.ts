@@ -5,7 +5,13 @@ export interface ScannedDevice {
   mac: string;
   type: string;
   status: 'online' | 'offline';
-  security: string;
-  lastSeen: string;
-  bandwidth: number;
+  /** ISO timestamp, or null for a known device that did not answer the scan. */
+  lastSeen: string | null;
+}
+
+export interface ScanResult {
+  subnets: string[];
+  scannedAt: string;
+  durationMs: number;
+  devices: ScannedDevice[];
 }

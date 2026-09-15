@@ -18,27 +18,19 @@ import {
 import { Trash2, HardDrive, RefreshCw, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import type { ScannedDevice } from "@/types/device";
-
-const fetchDevices = async (): Promise<ScannedDevice[]> => {
-  const res = await fetch("/api/scan");
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message ?? `Scan failed: ${res.status}`);
-  }
-  return res.json();
-};
+import { fetchScan, SCAN_QUERY_KEY } from "@/lib/scanApi";
 
 export default function DevicesPage() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
-  const { data: devices = [], isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["devices"],
-    queryFn: fetchDevices,
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
+    queryKey: SCAN_QUERY_KEY,
+    queryFn: fetchScan,
     staleTime: 60_000,
-    retry: 1,
+    retry: false,
   });
 
+  const devices = data?.devices ?? [];
   const visibleDevices = devices.filter((d) => !dismissed.has(d.id));
 
   const handleRemoveDevice = (id: string) =>
@@ -95,6 +87,13 @@ export default function DevicesPage() {
           </div>
         )}
 
+        {data && !isError && (
+          <p className="text-xs text-muted-foreground mb-4">
+            Scanned {data.subnets.join(", ")} in {(data.durationMs / 1000).toFixed(1)}s,{" "}
+            {formatDistanceToNow(new Date(data.scannedAt), { addSuffix: true })}
+          </p>
+        )}
+
         {!isLoading && !isError && visibleDevices.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-10 text-muted-foreground">
             <WifiOff className="h-10 w-10" />
@@ -120,12 +119,21 @@ export default function DevicesPage() {
                     )}
                   />
                   <div>
-                    <p className="font-medium">{device.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{device.name}</p>
+                      {device.type !== "unknown" && (
+                        <Badge variant="outline" className="text-xs">
+                          {device.type}
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground">
                       {device.ip} | {device.mac}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Last seen {formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}
+                      {device.lastSeen
+                        ? `Last seen ${formatDistanceToNow(new Date(device.lastSeen), { addSuffix: true })}`
+                        : "Not detected in the last scan"}
                     </p>
                   </div>
                 </div>
