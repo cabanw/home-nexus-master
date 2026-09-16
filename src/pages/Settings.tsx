@@ -1,6 +1,10 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { announceOnAlexa } from "@/lib/voiceMonkeyApi";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -12,9 +16,29 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Bell, Palette, Globe, Save } from "lucide-react";
+import { Bell, Palette, Globe, Save, Volume2 } from "lucide-react";
 
 export default function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Landing spot for the Resideo OAuth redirect (see /api/resideo/callback in vite.config.ts).
+  useEffect(() => {
+    const resideo = searchParams.get("resideo");
+    if (resideo === "connected") toast.success("Resideo connected");
+    else if (resideo === "error") toast.error(searchParams.get("message") || "Resideo connection failed");
+    if (resideo) {
+      searchParams.delete("resideo");
+      searchParams.delete("message");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const testAnnouncement = useMutation({
+    mutationFn: () => announceOnAlexa("Home Nexus test announcement. If you can hear this, it works."),
+    onSuccess: () => toast.success("Sent — check your Echo"),
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const [settings, setSettings] = useState({
     notifications: {
       security: true,
@@ -124,6 +148,23 @@ export default function SettingsPage() {
               </SelectContent>
             </Select>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Volume2 className="h-5 w-5 text-primary" />
+            Alexa Announcements
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Sends a test text-to-speech announcement to your Echo via Voice Monkey.
+          </p>
+          <Button variant="outline" onClick={() => testAnnouncement.mutate()} disabled={testAnnouncement.isPending}>
+            {testAnnouncement.isPending ? "Sending..." : "Send test announcement"}
+          </Button>
         </CardContent>
       </Card>
 

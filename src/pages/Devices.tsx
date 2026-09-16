@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { Trash2, HardDrive, RefreshCw, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { fetchScan, SCAN_QUERY_KEY } from "@/lib/scanApi";
+import { announceOnAlexa } from "@/lib/voiceMonkeyApi";
 
 export default function DevicesPage() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -32,6 +33,25 @@ export default function DevicesPage() {
 
   const devices = data?.devices ?? [];
   const visibleDevices = devices.filter((d) => !dismissed.has(d.id));
+
+  // Announces on Alexa when a device not seen in the previous scan shows up online.
+  // The ref starts empty so the very first scan just establishes the baseline
+  // (otherwise every already-known device would "announce" on page load).
+  const knownIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const onlineIds = new Set(data.devices.filter((d) => d.status === "online").map((d) => d.id));
+    if (knownIds.current) {
+      for (const device of data.devices) {
+        if (device.status === "online" && !knownIds.current.has(device.id)) {
+          announceOnAlexa(`New device on the network: ${device.name}, at ${device.ip}`).catch((err) =>
+            console.warn("Alexa announcement failed:", err),
+          );
+        }
+      }
+    }
+    knownIds.current = onlineIds;
+  }, [data]);
 
   const handleRemoveDevice = (id: string) =>
     setDismissed((prev) => new Set([...prev, id]));

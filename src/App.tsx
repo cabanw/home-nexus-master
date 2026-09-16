@@ -11,6 +11,7 @@ import UpdatePassword from "./pages/UpdatePassword";
 import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 import ProfilePage from "./pages/Profile";
+import SettingsPage from "./pages/Settings";
 import { ReactNode } from "react";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,7 @@ const App = () => (
               <Route element={<ProtectedRoute />}>
                 <Route path="/" element={<Index />} />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/settings" element={<SettingsPage />} />
               </Route>
               <Route element={<PublicRoute />}>
                 <Route path="/auth" element={<Auth />} />

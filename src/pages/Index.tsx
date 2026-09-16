@@ -25,7 +25,8 @@ import {
   Crown,
   HardDrive,
   Lightbulb,
-  User
+  User,
+  Settings as SettingsIcon
 } from "lucide-react";
 import UserManagement from "@/components/UserManagement";
 import DevicesPage from "@/pages/Devices";
@@ -125,6 +126,10 @@ const Index = () => {
                     <DropdownMenuItem onClick={() => navigate("/profile")}>
                       <User className="h-4 w-4 mr-2" />
                       Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate("/settings")}>
+                      <SettingsIcon className="h-4 w-4 mr-2" />
+                      Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleSignOut} className="text-destructive">

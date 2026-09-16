@@ -16,6 +16,9 @@ dist-ssr
 .env
 .env.local
 
+# Resideo OAuth tokens (personal account access/refresh tokens)
+server/.resideo-tokens.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

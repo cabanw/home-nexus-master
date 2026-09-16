@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { fetchKasaDevices, KASA_QUERY_KEY, setKasaDeviceState } from "@/lib/kasaApi";
 import type { KasaDiscoveryResult, KasaLockedDevice, KasaStateChange } from "@/types/kasa";
+import { announceOnAlexa } from "@/lib/voiceMonkeyApi";
+import ResideoThermostats from "@/components/ResideoThermostats";
 
 export default function SmartHomePage() {
   const queryClient = useQueryClient();
@@ -40,6 +42,24 @@ export default function SmartHomePage() {
   const onCount = devices.filter((d) => d.online && d.on).length;
   const pendingIp = stateMutation.isPending ? stateMutation.variables?.ip : null;
 
+  // Announces on Alexa when a switch that was online in the previous discovery drops offline.
+  // The ref starts empty so the first discovery just establishes the baseline.
+  const onlineIps = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const nowOnline = new Set(data.devices.filter((d) => d.online).map((d) => d.ip));
+    if (onlineIps.current) {
+      for (const device of data.devices) {
+        if (!device.online && onlineIps.current.has(device.ip)) {
+          announceOnAlexa(`${device.alias} went offline`).catch((err) =>
+            console.warn("Alexa announcement failed:", err),
+          );
+        }
+      }
+    }
+    onlineIps.current = nowOnline;
+  }, [data]);
+
   // Locked switches usually share one reason (e.g. missing credentials), so they are grouped by it.
   const lockedByReason = new Map<string, KasaLockedDevice[]>();
   for (const device of locked) {
@@ -50,6 +70,7 @@ export default function SmartHomePage() {
     setDraftBrightness(({ [ip]: _, ...rest }) => rest);
 
   return (
+    <div className="space-y-6">
     <Card className="bg-gradient-card border-border shadow-card">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2">
@@ -199,5 +220,8 @@ export default function SmartHomePage() {
         )}
       </CardContent>
     </Card>
+
+    <ResideoThermostats />
+    </div>
   );
 }

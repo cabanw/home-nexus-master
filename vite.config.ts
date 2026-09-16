@@ -19,8 +19,19 @@ import { applyInventory } from "./src/utils/inventory";
 import { KNOWN_INFRASTRUCTURE } from "./src/config/infrastructure";
 import { validateStateChange } from "./src/utils/kasaProtocol";
 import { discoverKasaDevices, getKasaDevice, setKasaState, type KasaCredentials } from "./server/kasa";
+import {
+  buildAuthorizeUrl,
+  exchangeCode,
+  getThermostats,
+  getTokenExpiry,
+  isConnected,
+  setThermostatState,
+  type ResideoConfig,
+} from "./server/resideo";
+import { announce, type VoiceMonkeyConfig } from "./server/voicemonkey";
 import type { ScanResult } from "./src/types/device";
 import type { KasaDevice, KasaDiscoveryResult } from "./src/types/kasa";
+import type { ResideoStateChange } from "./src/types/resideo";
 
 const SCAN_TIMEOUT_MS = 120_000;
 // Windows STATUS_DLL_NOT_FOUND (0xC0000135), seen as a signed or unsigned exit code.
@@ -250,6 +261,136 @@ function kasaApiPlugin(env: Record<string, string>): Plugin {
   };
 }
 
+// Vite plugin for the Resideo (Honeywell Home) cloud thermostat API: OAuth connect/callback plus
+// read/write of the connected account's thermostats. Returns null when RESIDEO_CLIENT_ID/SECRET are
+// not set, so the routes cleanly 404 instead of half-working.
+function resideoApiPlugin(env: Record<string, string>): Plugin | null {
+  if (!env.RESIDEO_CLIENT_ID || !env.RESIDEO_CLIENT_SECRET) return null;
+
+  const config: ResideoConfig = {
+    clientId: env.RESIDEO_CLIENT_ID,
+    clientSecret: env.RESIDEO_CLIENT_SECRET,
+    redirectUri: env.RESIDEO_REDIRECT_URI || "http://localhost:8080/api/resideo/callback",
+    tokenFile: path.resolve(__dirname, "server/.resideo-tokens.json"),
+  };
+  let inFlight: Promise<import("./src/types/resideo").ResideoThermostat[]> | null = null;
+
+  return {
+    name: "resideo-api",
+    configureServer(server) {
+      // Full-page navigation: the browser can't attach an Authorization header here, so this
+      // route (and /callback below) relies on being reachable only from this machine's own
+      // localhost dev server rather than on isSignedIn. /devices and /devices/:id/state below
+      // still require a signed-in session, same as Kasa.
+      server.middlewares.use("/api/resideo/connect", (_req, res) => {
+        const state = Math.random().toString(36).slice(2);
+        res.statusCode = 302;
+        res.setHeader("Location", buildAuthorizeUrl(config, state));
+        res.end();
+      });
+
+      server.middlewares.use("/api/resideo/callback", async (req, res) => {
+        try {
+          const url = new URL(req.url ?? "/", "http://localhost");
+          const code = url.searchParams.get("code");
+          const oauthError = url.searchParams.get("error");
+          if (oauthError) throw new HttpError(400, `Resideo declined authorization: ${oauthError}`);
+          if (!code) throw new HttpError(400, "Missing ?code from Resideo.");
+          await exchangeCode(config, code);
+          res.statusCode = 302;
+          res.setHeader("Location", "/settings?resideo=connected");
+          res.end();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`Resideo callback failed: ${message}`);
+          res.statusCode = 302;
+          res.setHeader("Location", `/settings?resideo=error&message=${encodeURIComponent(message)}`);
+          res.end();
+        }
+      });
+
+      server.middlewares.use("/api/resideo/status", async (req, res) => {
+        if (!(await isSignedIn(req.headers.authorization, env))) {
+          sendJson(res, 401, { message: "Sign in to check Resideo status." });
+          return;
+        }
+        const connected = await isConnected(config);
+        sendJson(res, 200, { connected, expiresAt: connected ? await getTokenExpiry(config) : undefined });
+      });
+
+      server.middlewares.use("/api/resideo/devices", async (req, res) => {
+        if (!(await isSignedIn(req.headers.authorization, env))) {
+          sendJson(res, 401, { message: "Sign in to use Resideo devices." });
+          return;
+        }
+        try {
+          const route = (req.url ?? "/").split("?")[0];
+
+          if (route === "/" || route === "") {
+            if (req.method !== "GET") throw new HttpError(405, "Method not allowed.");
+            if (!(await isConnected(config))) {
+              sendJson(res, 200, { connected: false, devices: [], fetchedAt: new Date().toISOString(), durationMs: 0 });
+              return;
+            }
+            const started = Date.now();
+            inFlight ??= getThermostats(config).finally(() => {
+              inFlight = null;
+            });
+            const devices = await inFlight;
+            sendJson(res, 200, { connected: true, devices, fetchedAt: new Date().toISOString(), durationMs: Date.now() - started });
+            return;
+          }
+
+          const stateRoute = route.match(/^\/([^/]+)\/state\/?$/);
+          if (!stateRoute) throw new HttpError(404, "Not found.");
+          if (req.method !== "POST") throw new HttpError(405, "Method not allowed.");
+
+          const deviceId = decodeURIComponent(stateRoute[1]);
+          const body = (await readJsonBody(req)) as ResideoStateChange & { locationId?: number };
+          if (typeof body.locationId !== "number") throw new HttpError(400, "locationId is required.");
+
+          const { locationId, ...change } = body;
+          const updated = await setThermostatState(config, locationId, deviceId, change);
+          sendJson(res, 200, updated);
+        } catch (err) {
+          sendError(res, err, "Resideo request failed");
+        }
+      });
+    },
+  };
+}
+
+// Vite plugin for Voice Monkey (HTTP→Alexa announcements). Returns null when VOICEMONKEY_TOKEN /
+// VOICEMONKEY_DEVICE_ID are not set, so the route cleanly 404s instead of half-working.
+function voiceMonkeyApiPlugin(env: Record<string, string>): Plugin | null {
+  if (!env.VOICEMONKEY_TOKEN || !env.VOICEMONKEY_DEVICE_ID) return null;
+  const config: VoiceMonkeyConfig = { token: env.VOICEMONKEY_TOKEN, deviceId: env.VOICEMONKEY_DEVICE_ID };
+
+  return {
+    name: "voicemonkey-api",
+    configureServer(server) {
+      server.middlewares.use("/api/voicemonkey/announce", async (req, res) => {
+        if (!(await isSignedIn(req.headers.authorization, env))) {
+          sendJson(res, 401, { message: "Sign in to send announcements." });
+          return;
+        }
+        if (req.method !== "POST") {
+          sendJson(res, 405, { message: "Method not allowed." });
+          return;
+        }
+        try {
+          const body = (await readJsonBody(req)) as { text?: string; deviceId?: string };
+          if (!body.text) throw new HttpError(400, "text is required.");
+          await announce(config, body.text, body.deviceId);
+          sendJson(res, 200, { ok: true });
+        } catch (err) {
+          sendError(res, err, "Voice Monkey announcement failed");
+        }
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Load every .env variable (not only VITE_*) so the server-side settings reach the plugins.
@@ -260,7 +401,13 @@ export default defineConfig(({ mode }) => {
       host: "::",
       port: 8080,
     },
-    plugins: [react(), networkScanApiPlugin(env), kasaApiPlugin(env)],
+    plugins: [
+      react(),
+      networkScanApiPlugin(env),
+      kasaApiPlugin(env),
+      resideoApiPlugin(env),
+      voiceMonkeyApiPlugin(env),
+    ].filter(Boolean) as Plugin[],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

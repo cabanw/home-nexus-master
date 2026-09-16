@@ -44,6 +44,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { announceOnAlexa } from "@/lib/voiceMonkeyApi";
 
 interface FirewallRule {
   id: string;
@@ -103,12 +104,18 @@ export default function FirewallPage() {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["firewall_rules"] });
       setIsDialogOpen(false);
       setIsEditing(null);
       setCurrentRule({});
       toast.success("Rule saved");
+      // Only announce for new rules, not edits to an existing one.
+      if (!variables.id) {
+        announceOnAlexa(
+          `New firewall rule added: ${variables.action ?? "allow"} from ${variables.source ?? "any"} to ${variables.destination ?? "any"}`,
+        ).catch((err) => console.warn("Alexa announcement failed:", err));
+      }
     },
     onError: (err: Error) => toast.error(err.message),
   });
