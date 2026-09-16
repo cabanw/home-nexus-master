@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { existsSync } from "fs";
 import { execFile } from "child_process";
+import { randomBytes, timingSafeEqual } from "crypto";
 import { parseString } from "xml2js";
 import type { IncomingMessage, ServerResponse } from "http";
 import { parseNmapHosts } from "./src/utils/nmapParser";
@@ -274,6 +275,10 @@ function resideoApiPlugin(env: Record<string, string>): Plugin | null {
     tokenFile: path.resolve(__dirname, "server/.resideo-tokens.json"),
   };
   let inFlight: Promise<import("./src/types/resideo").ResideoThermostat[]> | null = null;
+  // The ?state we sent on the last /connect, kept so /callback can reject a code that did not
+  // come from a flow this server started. Cleared as soon as it is used or expires.
+  let pendingState: { value: string; expiresAt: number } | null = null;
+  const STATE_TTL_MS = 10 * 60_000;
 
   return {
     name: "resideo-api",
@@ -283,7 +288,8 @@ function resideoApiPlugin(env: Record<string, string>): Plugin | null {
       // localhost dev server rather than on isSignedIn. /devices and /devices/:id/state below
       // still require a signed-in session, same as Kasa.
       server.middlewares.use("/api/resideo/connect", (_req, res) => {
-        const state = Math.random().toString(36).slice(2);
+        const state = randomBytes(32).toString("hex");
+        pendingState = { value: state, expiresAt: Date.now() + STATE_TTL_MS };
         res.statusCode = 302;
         res.setHeader("Location", buildAuthorizeUrl(config, state));
         res.end();
@@ -296,6 +302,22 @@ function resideoApiPlugin(env: Record<string, string>): Plugin | null {
           const oauthError = url.searchParams.get("error");
           if (oauthError) throw new HttpError(400, `Resideo declined authorization: ${oauthError}`);
           if (!code) throw new HttpError(400, "Missing ?code from Resideo.");
+
+          // Without this, anything that can make this browser hit /callback could bind the
+          // dev server to someone else's Resideo account. Compared in constant time, and the
+          // state is single-use so a replayed callback is rejected too.
+          const state = url.searchParams.get("state") ?? "";
+          const expected = pendingState;
+          pendingState = null;
+          if (!expected || Date.now() > expected.expiresAt) {
+            throw new HttpError(400, "No authorization is in progress. Start again from Settings.");
+          }
+          const given = Buffer.from(state);
+          const want = Buffer.from(expected.value);
+          if (given.length !== want.length || !timingSafeEqual(given, want)) {
+            throw new HttpError(400, "State mismatch — this callback did not come from Home Nexus.");
+          }
+
           await exchangeCode(config, code);
           res.statusCode = 302;
           res.setHeader("Location", "/settings?resideo=connected");

@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { readFile, writeFile, mkdir, chmod } from "fs/promises";
 import { dirname } from "path";
 import type {
   ResideoFanMode,
@@ -48,7 +48,11 @@ async function loadTokens(tokenFile: string): Promise<StoredTokens | null> {
 async function saveTokens(tokenFile: string, tokens: StoredTokens): Promise<void> {
   cached = tokens;
   await mkdir(dirname(tokenFile), { recursive: true });
-  await writeFile(tokenFile, JSON.stringify(tokens, null, 2), "utf8");
+  // These are long-lived credentials to the Resideo account, so the file is owner-only rather
+  // than the default world-readable mode. `mode` only applies when the file is created, so an
+  // existing one is tightened explicitly.
+  await writeFile(tokenFile, JSON.stringify(tokens, null, 2), { encoding: "utf8", mode: 0o600 });
+  await chmod(tokenFile, 0o600);
 }
 
 export function buildAuthorizeUrl(config: ResideoConfig, state: string): string {
